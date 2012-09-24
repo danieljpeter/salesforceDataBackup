@@ -1,23 +1,25 @@
 <?php
 
+
 require_once ('settings.php');
 require_once ('phpToolkit/SforcePartnerClient.php');
 require_once ('phpToolkit/SforceHeaderOptions.php');
 require_once ('rackspace/cloudfiles.php');
 
-downloadBackupsFromSalesforce($USERNAME, $PASSWORD);
-doRackspaceUploadNewDeleteOld($RS_USERNAME, $RS_KEY);
+
+downloadBackupsFromSalesforce();
+doRackspaceUploadNewDeleteOld();
 
 
-function downloadBackupsFromSalesforce($USERNAME, $PASSWORD) {
+function downloadBackupsFromSalesforce() {
 
 
 	//get a session ID via the php toolkit API
-	$sessionId = getSession($USERNAME, $PASSWORD);
+	$sessionId = getSession();
 
 	//build the cookie info out of session ID and org ID
 	$sc = 'Cookie=';
-	$sc .= 'oid='.$ORGID.'; '; 
+	$sc .= 'oid='.ORGID.'; '; 
 	$sc .= 'sid='.$sessionId.'; ';
 
 	//request the data export page in the frontend UI
@@ -26,15 +28,15 @@ function downloadBackupsFromSalesforce($USERNAME, $PASSWORD) {
 	//print($response);
 
 	$doc = new DOMDocument();
-	$doc->loadHTML($response);
+	@$doc->loadHTML($response);
 
-	$tags = $doc->getElementsByTagName('a'); //get all the href's on the page
+	@$tags = $doc->getElementsByTagName('a'); //get all the href's on the page
 
 	$arrFilenames = array();
 
 	foreach ($tags as $tag) {		//filter to just the href's for the file downloads
 		if (strpos($tag->getAttribute('href'), 'servlet.OrgExport?fileName=') !== false) {
-			array_push($arrFilenames, 'https://ssl.salesforce.com'.$tag->getAttribute('href'));	
+			array_push($arrFilenames, 'https://'.SFURL.$tag->getAttribute('href'));	
 		}
 	}
 
@@ -51,7 +53,7 @@ function downloadBackupsFromSalesforce($USERNAME, $PASSWORD) {
 
 
 
-function doRackspaceUploadNewDeleteOld($RS_USERNAME, $RS_KEY) {
+function doRackspaceUploadNewDeleteOld() {
 	//get the most recent grouping of files.
 	$arrRecentFiles = getMostRecentFiles();
 	sort($arrRecentFiles);
@@ -61,7 +63,7 @@ function doRackspaceUploadNewDeleteOld($RS_USERNAME, $RS_KEY) {
 		
 		//============================================ get our rackspace auth, connection, and container set up =====================================
 		//Create the authentication instance
-		$auth = new CF_Authentication($RS_USERNAME, $RS_KEY);
+		$auth = new CF_Authentication(RS_USERNAME, RS_KEY);
 
 		//Perform authentication request
 		$auth->authenticate();
@@ -70,12 +72,12 @@ function doRackspaceUploadNewDeleteOld($RS_USERNAME, $RS_KEY) {
 		$conn = new CF_Connection($auth);
 
 		//get the "salesforce_backups" container
-		$cont = $conn->get_container('salesforce_backups');
+		$cont = $conn->get_container('dreamforce');
 		//============================================ end get our rackspace auth, connection, and container set up =====================================
 
 		
 		//get the date prefix off of the most recent grouping of local files
-		$recentFileDate = getDatePrefix($arrRecentFiles[0]);
+		@$recentFileDate = getDatePrefix($arrRecentFiles[0]);
 
 		//get the listing of files from rackspace cloud files
 		$arrRackspaceFiles = $cont->list_objects();
@@ -314,9 +316,8 @@ function filterDistinctPrefixes($arrInput) {
 
 
 
-function getExportPageRaw($sc) {
-
-	$url = 'https://ssl.salesforce.com/ui/setup/export/DataExportPage/d';
+function getExportPageRaw($sc) {	
+	$url = 'https://'.SFURL.'/ui/setup/export/DataExportPage/d';
 	$ch = curl_init($url);
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 	curl_setopt($ch, CURLOPT_COOKIE, $sc);	
@@ -328,12 +329,12 @@ function getExportPageRaw($sc) {
 }
 
 
-function getSession($USERNAME, $PASSWORD) {
+function getSession() {
 	$sessionId = '';	
 	try {
 		$mySforceConnection = new SforcePartnerClient();
 		$mySoapClient = $mySforceConnection->createConnection('phpToolkit/partner.wsdl.xml');
-		$mylogin = $mySforceConnection->login($USERNAME, $PASSWORD);
+		$mylogin = $mySforceConnection->login(USERNAME, PASSWORD);
 		$sessionId = $mylogin->sessionId;
 	} catch (Exception $e) {
 		print_r($mySforceConnection->getLastRequest());
@@ -421,14 +422,14 @@ function multiRequest($data, $sCookie, $options = array()) {
     curl_setopt($curly[$id], CURLOPT_RETURNTRANSFER, 1);
 	curl_setopt($curly[$id], CURLOPT_COOKIE, $sCookie);
 	
-	//change this: https://ssl.salesforce.com/servlet/servlet.OrgExport?fileName=WE_000000000000000000_1.ZIP&id=000000000000000
-	//to this: 20120423-WE_000000000000000000_1.ZIP
-	$fname = str_replace('https://ssl.salesforce.com/servlet/servlet.OrgExport?fileName=', '', $url);
+	//change this: https://ssl.salesforce.com/servlet/servlet.OrgExport?fileName=WE_00D00000000hgdLEAQ_1.ZIP&id=09200000000cD3X
+	//to this: 20120423-WE_00D00000000hgdLEAQ_1.ZIP
+	$fname = str_replace('https://'.SFURL.'/servlet/servlet.OrgExport?fileName=', '', $url);
 	$arrTemp = explode('.ZIP', $fname);
 	$fname = $arrTemp[0].'.ZIP';
 	$fname = date('Ymd').'-'.$fname;	
 	
-	$arrFH[$id] = fopen('/home/dpeter/sfData/data/'.$fname, 'w'); 
+	$arrFH[$id] = fopen(DATA_DIR.$fname, 'w'); 
 	curl_setopt($curly[$id], CURLOPT_FILE, $arrFH[$id]); 	
 	
     // post?
